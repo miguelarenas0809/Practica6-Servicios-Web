@@ -1,6 +1,6 @@
 # Sala de cine: lectores-escritores con servicios web
 
-[![CI](https://github.com/USUARIO/REPOSITORIO/actions/workflows/ci.yml/badge.svg)](https://github.com/USUARIO/REPOSITORIO/actions/workflows/ci.yml)
+[![CI](https://github.com/USUARIO/REPOSITORIO/actions/workflows/ci.yml/badge.svg)](https://github.com/miguelarenas0809/Practica6-Servicios-Web/actions/workflows/ci.yml)
 
 Simulación de venta de boletos en una sala de cine mediante un servicio web en Flask.
 Es una instancia del problema **lectores-escritores**:
