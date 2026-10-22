@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: Pruebas (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Revisar estilo
+        run: ruff check .
+
+      - name: Verificar que todo compila (incluye la GUI, que no se ejecuta en CI)
+        run: python -m compileall -q .
+
+      - name: Ejecutar pruebas
+        run: pytest -v
+
+  simulacion:
+    name: Simulacion (${{ matrix.nombre }})
+    needs: pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Valor de prueba, solo para este servidor efimero del CI. No es un secreto real.
+      ADMIN_TOKEN: token-de-prueba-ci
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { nombre: ligera,            clientes: 20,  acciones: 30, filas: 10, columnas: 10, p_consulta: 0.8, zona: 60 }
+          - { nombre: alta-concurrencia, clientes: 100, acciones: 30, filas: 10, columnas: 10, p_consulta: 0.8, zona: 60 }
+          - { nombre: mayoria-compras,   clientes: 50,  acciones: 40, filas: 8,  columnas: 8,  p_consulta: 0.2, zona: 30 }
+          - { nombre: alta-contencion,   clientes: 100, acciones: 30, filas: 5,  columnas: 8,  p_consulta: 0.5, zona: 40 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Iniciar servidor en segundo plano
+        run: |
+          nohup python servidor.py --filas ${{ matrix.filas }} --columnas ${{ matrix.columnas }} \
+            --puerto 5000 > servidor.log 2>&1 &
+
+      - name: Ejecutar simulador (falla si alguna invariante se rompe)
+        run: |
+          python simulador.py --url http://127.0.0.1:5000 --esperar 30 \
+            --clientes ${{ matrix.clientes }} --acciones ${{ matrix.acciones }} \
+            --filas ${{ matrix.filas }} --columnas ${{ matrix.columnas }} \
+            --p-consulta ${{ matrix.p_consulta }} --zona ${{ matrix.zona }} \
+            --salida resultados.json
+
+      - name: Escribir resumen en la pagina del trabajo
+        if: always()
+        run: |
+          if [ -f resultados.json ]; then
+            echo "## ${{ matrix.nombre }}" >> "$GITHUB_STEP_SUMMARY"
+            python scripts/resumen_md.py resultados.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Subir resultados como artefacto
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-${{ matrix.nombre }}
+          path: |
+            resultados.json
+            servidor.log
+          if-no-files-found: warn

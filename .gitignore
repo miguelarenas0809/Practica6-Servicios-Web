@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Certificados y claves (nunca subir)
+*.pem
+*.key
+.env
+
+# Resultados generados por el simulador
+resultados*.json
+*.log
